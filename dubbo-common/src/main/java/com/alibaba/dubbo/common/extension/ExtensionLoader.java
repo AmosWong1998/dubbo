@@ -201,6 +201,7 @@ public class ExtensionLoader<T> {
 
     /**
      * This is equivalent to {@code getActivateExtension(url, url.getParameter(key).split(","), null)}
+     * 获得符合自动激活条件的拓展对象数组
      *
      * @param url   url
      * @param key   url parameter key which used to get extension point names
@@ -225,15 +226,23 @@ public class ExtensionLoader<T> {
     public List<T> getActivateExtension(URL url, String[] values, String group) {
         List<T> exts = new ArrayList<T>();
         List<String> names = values == null ? new ArrayList<String>(0) : Arrays.asList(values);
+        // 处理自动激活的拓展对象们
+        // 判断不存在配置 `"-name"` 。例如，<dubbo:service filter="-default" /> ，代表移除所有默认过滤器。
         if (!names.contains(Constants.REMOVE_VALUE_PREFIX + Constants.DEFAULT_KEY)) {
+            // 获取拓展类，从三个文件中加载拓展类，
+            // 如果拓展类被@Activate修饰会将其加入到缓存cachedActivates中
             getExtensionClasses();
             for (Map.Entry<String, Activate> entry : cachedActivates.entrySet()) {
                 String name = entry.getKey();
                 Activate activate = entry.getValue();
+                // 匹配分组
                 if (isMatchGroup(group, activate.group())) {
+                    // 不包含在自定义配置里。如果包含，会在下面的代码处理。
                     if (!names.contains(name)
+                            // 判断是否配置移除。例如 <dubbo:service filter="-monitor" />，则 MonitorFilter 会被移除
                             && !names.contains(Constants.REMOVE_VALUE_PREFIX + name)
                             && isActive(activate, url)) {
+                        // 获取拓展
                         T ext = getExtension(name);
                         exts.add(ext);
                     }
@@ -241,17 +250,23 @@ public class ExtensionLoader<T> {
             }
             Collections.sort(exts, ActivateComparator.COMPARATOR);
         }
+
+        // 处理自定义配置的拓展对象们
+        // 例如在 <dubbo:service filter="demo" /> ，代表需要加入 DemoFilter （这个是笔者自定义的）
         List<T> usrs = new ArrayList<T>();
         for (int i = 0; i < names.size(); i++) {
             String name = names.get(i);
             if (!name.startsWith(Constants.REMOVE_VALUE_PREFIX)
                     && !names.contains(Constants.REMOVE_VALUE_PREFIX + name)) {
+                // 将配置的自定义在自动激活的拓展对象们前面。
+                // 例如，<dubbo:service filter="demo,default,demo2" /> ，则 DemoFilter 就会放在默认的过滤器前面。
                 if (Constants.DEFAULT_KEY.equals(name)) {
                     if (!usrs.isEmpty()) {
                         exts.addAll(0, usrs);
                         usrs.clear();
                     }
                 } else {
+                    // 获取拓展对象
                     T ext = getExtension(name);
                     usrs.add(ext);
                 }
@@ -329,6 +344,7 @@ public class ExtensionLoader<T> {
     /**
      * 获得指定拓展对象
      * 返回指定名字的扩展对象。如果指定名字的扩展不存在，则抛异常 {@link IllegalStateException}.
+     *
      * @param name 拓展名
      */
     @SuppressWarnings("unchecked")
@@ -480,6 +496,7 @@ public class ExtensionLoader<T> {
 
     /**
      * 获取自适应拓展类
+     *
      * @return
      */
     @SuppressWarnings("unchecked")

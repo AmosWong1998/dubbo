@@ -31,37 +31,19 @@ import com.alibaba.dubbo.config.model.ApplicationModel;
 import com.alibaba.dubbo.config.model.ProviderModel;
 import com.alibaba.dubbo.config.support.Parameter;
 import com.alibaba.dubbo.remoting.transport.CodecSupport;
-import com.alibaba.dubbo.rpc.Exporter;
-import com.alibaba.dubbo.rpc.Invoker;
-import com.alibaba.dubbo.rpc.Protocol;
-import com.alibaba.dubbo.rpc.ProxyFactory;
-import com.alibaba.dubbo.rpc.StaticContext;
+import com.alibaba.dubbo.rpc.*;
 import com.alibaba.dubbo.rpc.cluster.ConfiguratorFactory;
 import com.alibaba.dubbo.rpc.service.GenericService;
 import com.alibaba.dubbo.rpc.support.ProtocolUtils;
 
 import java.lang.reflect.Method;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.net.Socket;
-import java.net.SocketAddress;
-import java.net.UnknownHostException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.net.*;
+import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-import static com.alibaba.dubbo.common.utils.NetUtils.LOCALHOST;
-import static com.alibaba.dubbo.common.utils.NetUtils.getAvailablePort;
-import static com.alibaba.dubbo.common.utils.NetUtils.getLocalHost;
-import static com.alibaba.dubbo.common.utils.NetUtils.isInvalidLocalHost;
-import static com.alibaba.dubbo.common.utils.NetUtils.isInvalidPort;
+import static com.alibaba.dubbo.common.utils.NetUtils.*;
 
 /**
  * ServiceConfig
@@ -80,7 +62,18 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
 
     private static final ScheduledExecutorService delayExportExecutor = Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("DubboServiceDelayExporter", true));
     private final List<URL> urls = new ArrayList<URL>();
+
+    /**
+     * 服务配置暴露的 Exporter 。
+     * URL ：Exporter 不一定是 1：1 的关系。
+     * 例如 {@link #scope} 未设置时，会暴露 Local + Remote 两个，也就是 URL ：Exporter = 1：2
+     * {@link #scope} 设置为空时，不会暴露，也就是 URL ：Exporter = 1：0
+     * {@link #scope} 设置为 Local 或 Remote 任一时，会暴露 Local 或 Remote 一个，也就是 URL ：Exporter = 1：1
+     *
+     * 非配置。
+     */
     private final List<Exporter<?>> exporters = new ArrayList<Exporter<?>>();
+
     // interface type
     private String interfaceName;
     private Class<?> interfaceClass;
@@ -195,10 +188,15 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
     }
 
     public synchronized void export() {
+        // 配置检查
         if (provider != null) {
+            // 是否导出服务
+            // <dubbo:provider export="false" />
             if (export == null) {
                 export = provider.getExport();
             }
+
+            // 是否延迟导出
             if (delay == null) {
                 delay = provider.getDelay();
             }
@@ -208,6 +206,7 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
         }
 
         if (delay != null && delay > 0) {
+            // 延迟导出
             delayExportExecutor.schedule(new Runnable() {
                 @Override
                 public void run() {
@@ -215,11 +214,13 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
                 }
             }, delay, TimeUnit.MILLISECONDS);
         } else {
+            // 立即导出
             doExport();
         }
     }
 
     protected synchronized void doExport() {
+        // 参数检查、设置默认值 没任何卵用
         if (unexported) {
             throw new IllegalStateException("Already unexported!");
         }
@@ -317,7 +318,13 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
         if (path == null || path.length() == 0) {
             path = interfaceName;
         }
+
+        // 导出服务
         doExportUrls();
+
+        // ProviderModel 表示服务提供者模型，此对象中存储了和服务提供者相关的信息。
+        // 比如服务的配置信息，服务实例等。每个被导出的服务对应一个 ProviderModel。
+        // ApplicationModel 持有所有的 ProviderModel。
         CodecSupport.addProviderSupportedSerialization(getUniqueServiceName(), getExportedUrls());
         ProviderModel providerModel = new ProviderModel(getUniqueServiceName(), this, ref);
         ApplicationModel.initProviderModel(getUniqueServiceName(), providerModel);
@@ -357,13 +364,20 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private void doExportUrls() {
+        // 加载注册中心的URL
         List<URL> registryURLs = loadRegistries(true);
+
+        // 使用每种协议向每个注册中心导出服务
         for (ProtocolConfig protocolConfig : protocols) {
             doExportUrlsFor1Protocol(protocolConfig, registryURLs);
         }
     }
 
     private void doExportUrlsFor1Protocol(ProtocolConfig protocolConfig, List<URL> registryURLs) {
+        // 1.组装URL
+        // 版本、时间戳、方法名以及各种配置对象的字段信息放入到 map 中，
+        // map 中的内容将作为 URL 的查询字符串。构建好 map 后，紧接着是获取上下文路径、主机名以及端口号等信息。
+        // 最后将 map 和主机名等数据传给 URL 构造方法创建 URL 对象
         String name = protocolConfig.getName();
         if (name == null || name.length() == 0) {
             name = "dubbo";
@@ -461,10 +475,12 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
                 map.put(Constants.TOKEN_KEY, token);
             }
         }
+
         if (Constants.LOCAL_PROTOCOL.equals(protocolConfig.getName())) {
             protocolConfig.setRegister(false);
             map.put("notify", "false");
         }
+
         // export service
         String contextPath = protocolConfig.getContextpath();
         if ((contextPath == null || contextPath.length() == 0) && provider != null) {
@@ -485,43 +501,75 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
         // don't export when none is configured
         if (!Constants.SCOPE_NONE.toString().equalsIgnoreCase(scope)) {
 
-            // export to local if the config is not remote (export to remote only when config is remote)
+            // 2.本地导出
             if (!Constants.SCOPE_REMOTE.toString().equalsIgnoreCase(scope)) {
                 exportLocal(url);
             }
-            // export to remote if the config is not local (export to local only when config is local)
+
+            // 3.远程导出
             if (!Constants.SCOPE_LOCAL.toString().equalsIgnoreCase(scope)) {
                 if (logger.isInfoEnabled()) {
                     logger.info("Export dubbo service " + interfaceClass.getName() + " to url " + url);
                 }
+
+                // 远程导出-需要连接注册中心
                 if (registryURLs != null && !registryURLs.isEmpty()) {
+                    // 遍历注册中心的URL
                     for (URL registryURL : registryURLs) {
                         url = url.addParameterIfAbsent(Constants.DYNAMIC_KEY, registryURL.getParameter(Constants.DYNAMIC_KEY));
+
+                        // 获取监控中心的URL
                         URL monitorUrl = loadMonitor(registryURL);
                         if (monitorUrl != null) {
                             url = url.addParameterAndEncoded(Constants.MONITOR_KEY, monitorUrl.toFullString());
                         }
+
                         if (logger.isInfoEnabled()) {
                             logger.info("Register dubbo service " + interfaceClass.getName() + " url " + url + " to registry " + registryURL);
                         }
 
-                        // For providers, this is used to enable custom proxy to generate invoker
                         String proxy = url.getParameter(Constants.PROXY_KEY);
                         if (StringUtils.isNotEmpty(proxy)) {
                             registryURL = registryURL.addParameter(Constants.PROXY_KEY, proxy);
                         }
 
+                        // 使用 ProxyFactory 创建 Invoker 对象
+                        // 将服务提供者的 URL 作为 "export" 参数添加到注册中心的 URL 中
+                        // 通过这样的方式，注册中心的 URL 中，包含了服务提供者的配置
+                        // 这里想下为啥要加入服务提供者的URL？
                         Invoker<?> invoker = proxyFactory.getInvoker(ref, (Class) interfaceClass, registryURL.addParameterAndEncoded(Constants.EXPORT_KEY, url.toFullString()));
+
+                        // 创建 DelegateProviderMetaDataInvoker 对象，该对象在 Invoker 对象的基础上，增加了当前服务提供者 ServiceConfig 对象。
                         DelegateProviderMetaDataInvoker wrapperInvoker = new DelegateProviderMetaDataInvoker(invoker, this);
 
+                        // 使用 Protocol 进行服务导出，创建Exporter
+                        // 根据 invoker.url 自动获得对应 Protocol 拓展实现为 DubboProtocol
+                        // Protocol 有两个 Wrapper 拓展实现类：ProtocolFilterWrapper、ProtocolListenerWrapper 所以该方法的调用顺序是：
+                        // Protocol$Adaptive => ProtocolFilterWrapper => ProtocolListenerWrapper => RegistryProtocol
+                        // =>
+                        // Protocol$Adaptive => ProtocolFilterWrapper => ProtocolListenerWrapper => DubboProtocol
+                        // 为啥有两条调用链？
+                        // 首先，传入的是注册中心的 URL ，通过 Protocol$Adaptive 获取到的是 RegistryProtocol 对象。
+                        // 其次，RegistryProtocol 会在其 #export(...) 方法中，使用服务提供者的 URL ( 即注册中心的 URL 的 export 参数值)，
+                        // 再次调用 Protocol$Adaptive 获取到的是 DubboProtocol 对象，进行服务暴露
+                        // 为什么是这样的顺序？通过这样的顺序，可以实现类似 AOP 的效果，
+                        // 在本地服务器启动完成后，再向注册中心注册
                         Exporter<?> exporter = protocol.export(wrapperInvoker);
+
                         exporters.add(exporter);
                     }
+
+                    // 远程导出-消费者直连
                 } else {
+                    // 使用 ProxyFactory 创建 Invoker 对象
                     Invoker<?> invoker = proxyFactory.getInvoker(ref, (Class) interfaceClass, url);
+
+                    // 创建 DelegateProviderMetaDataInvoker 对象
                     DelegateProviderMetaDataInvoker wrapperInvoker = new DelegateProviderMetaDataInvoker(invoker, this);
 
+                    // 使用 Protocol 进行服务导出，创建Exporter
                     Exporter<?> exporter = protocol.export(wrapperInvoker);
+
                     exporters.add(exporter);
                 }
             }
@@ -531,14 +579,34 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private void exportLocal(URL url) {
+        // 如果 URL 的协议头等于 injvm，说明已经导出到本地了，无需再次导出
         if (!Constants.LOCAL_PROTOCOL.equalsIgnoreCase(url.getProtocol())) {
+
+            // 基于原有 url ，创建新的服务的本地 Dubbo URL 对象，
+            // 并设置属性 protocol=injvm host=127.0.0.1 port=0 。因为 url 在后面远程暴露服务会使用，所以要新创建。
+            // 创建本地 Dubbo URL
+            // 将protocol设置为injvm
             URL local = URL.valueOf(url.toFullString())
                     .setProtocol(Constants.LOCAL_PROTOCOL)
                     .setHost(LOCALHOST)
                     .setPort(0);
+
+            // 添加服务的真实类名，例如 DemoServiceImpl ，仅用于 RestProtocol 中
             StaticContext.getContext(Constants.SERVICE_IMPL_CLASS).put(url.getServiceKey(), getServiceClass(ref));
+
+            // Invoker 是实体域，它是 Dubbo 的核心模型，其它模型都向它靠扰，或转换成它，它代表一个可执行体，
+            // 可向它发起 invoke 调用，它有可能是一个本地的实现，也可能是一个远程的实现，也可能一个集群实现。
+
+            // 使用 ProxyFactory 创建 Invoker 对象，Invoker对象会调用Service对象（ref）的真实方法
+            // 使用 Protocol 暴露 Invoker 对象，这里会根据Invoker自动获取对应的协议
+            // Protocol 有两个 Wrapper 拓展实现类： ProtocolFilterWrapper、ProtocolListenerWrapper
+            // 所以，#export(...) 方法的调用顺序是：Protocol$Adaptive => ProtocolFilterWrapper => ProtocolListenerWrapper => InjvmProtocol
+
+            // 创建 Invoker，并导出服务，这里的 protocol 会在运行时调用 InjvmProtocol 的 export 方法
             Exporter<?> exporter = protocol.export(
                     proxyFactory.getInvoker(ref, (Class) interfaceClass, local));
+
+            // 添加到 `exporters`
             exporters.add(exporter);
             logger.info("Export dubbo service " + interfaceClass.getName() + " to local registry");
         }

@@ -32,13 +32,19 @@ public class JavassistProxyFactory extends AbstractProxyFactory {
     @Override
     @SuppressWarnings("unchecked")
     public <T> T getProxy(Invoker<T> invoker, Class<?>[] interfaces) {
+        // 生成 Proxy 子类（Proxy 是抽象类）。并调用Proxy 子类的 newInstance 方法生成 Proxy 实例
+        // InvokerInvocationHandler 实现自 JDK 的 InvocationHandler 接口，具体的用途是拦截接口类调用
         return (T) Proxy.getProxy(interfaces).newInstance(new InvokerInvocationHandler(invoker));
     }
 
     @Override
     public <T> Invoker<T> getInvoker(T proxy, Class<T> type, URL url) {
-        // TODO Wrapper cannot handle this scenario correctly: the classname contains '$'
+        // 为目标类创建 Wrapper
+        // 传入Class对象，getWrapper()方法会对其进行解析 生成invokeMethod()方法
+        // 代码生成后最后通过Javassist生成Wrapper的Class对象
         final Wrapper wrapper = Wrapper.getWrapper(proxy.getClass().getName().indexOf('$') < 0 ? proxy.getClass() : type);
+
+        // 创建匿名 Invoker 类对象，并实现 doInvoke 方法
         return new AbstractProxyInvoker<T>(proxy, type, url) {
             @Override
             protected Object doInvoke(T proxy, String methodName,

@@ -272,6 +272,8 @@ public abstract class AbstractRegistry implements Registry {
         if (logger.isInfoEnabled()) {
             logger.info("Register: " + url);
         }
+
+        // 将URL添加到已注册的缓存中
         registered.add(url);
     }
 

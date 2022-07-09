@@ -132,10 +132,12 @@ public class UrlUtils {
         if (addresses == null || addresses.length == 0) {
             return null; //here won't be empty
         }
+
         List<URL> registries = new ArrayList<URL>();
         for (String addr : addresses) {
             registries.add(parseURL(addr, defaults));
         }
+
         return registries;
     }
 

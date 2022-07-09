@@ -20,11 +20,7 @@ import com.alibaba.dubbo.common.Constants;
 import com.alibaba.dubbo.common.URL;
 import com.alibaba.dubbo.common.Version;
 import com.alibaba.dubbo.common.extension.ExtensionLoader;
-import com.alibaba.dubbo.common.utils.ConfigUtils;
-import com.alibaba.dubbo.common.utils.NetUtils;
-import com.alibaba.dubbo.common.utils.ReflectUtils;
-import com.alibaba.dubbo.common.utils.StringUtils;
-import com.alibaba.dubbo.common.utils.UrlUtils;
+import com.alibaba.dubbo.common.utils.*;
 import com.alibaba.dubbo.config.support.Parameter;
 import com.alibaba.dubbo.monitor.MonitorFactory;
 import com.alibaba.dubbo.monitor.MonitorService;
@@ -36,12 +32,12 @@ import com.alibaba.dubbo.rpc.ProxyFactory;
 import com.alibaba.dubbo.rpc.cluster.Cluster;
 import com.alibaba.dubbo.rpc.support.MockInvoker;
 
-import static com.alibaba.dubbo.common.utils.NetUtils.isInvalidLocalHost;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import static com.alibaba.dubbo.common.utils.NetUtils.isInvalidLocalHost;
 
 /**
  * AbstractDefaultConfig
@@ -161,16 +157,22 @@ public abstract class AbstractInterfaceConfig extends AbstractMethodConfig {
     protected List<URL> loadRegistries(boolean provider) {
         checkRegistry();
         List<URL> registryList = new ArrayList<URL>();
+
+        // 遍历注册中心的配置
         if (registries != null && !registries.isEmpty()) {
             for (RegistryConfig config : registries) {
                 String address = config.getAddress();
                 if (address == null || address.length() == 0) {
                     address = Constants.ANYHOST_VALUE;
                 }
+
+                // 从系统属性中加载注册中心地址
+                // 启动参数优先级最高，如有则覆盖配置
                 String sysaddress = System.getProperty("dubbo.registry.address");
                 if (sysaddress != null && sysaddress.length() > 0) {
                     address = sysaddress;
                 }
+
                 if (address.length() > 0 && !RegistryConfig.NO_AVAILABLE.equalsIgnoreCase(address)) {
                     Map<String, String> map = new HashMap<String, String>();
                     appendParameters(map, application);
@@ -181,6 +183,8 @@ public abstract class AbstractInterfaceConfig extends AbstractMethodConfig {
                     if (ConfigUtils.getPid() > 0) {
                         map.put(Constants.PID_KEY, String.valueOf(ConfigUtils.getPid()));
                     }
+
+                    // 如果没配置协议则使用默认的dubbo协议
                     if (!map.containsKey("protocol")) {
                         if (ExtensionLoader.getExtensionLoader(RegistryFactory.class).hasExtension("remote")) {
                             map.put("protocol", "remote");
@@ -188,9 +192,19 @@ public abstract class AbstractInterfaceConfig extends AbstractMethodConfig {
                             map.put("protocol", "dubbo");
                         }
                     }
+
+                    // 解析得到 URL 列表，address 可能包含多个注册中心 ip，
+                    // 因此解析得到的是一个 URL 列表
+                    // 解析得到：zookeeper://127.0.0.1:2181/com.alibaba.dubbo.registry.RegistryService?application=xxxx
                     List<URL> urls = UrlUtils.parseURLs(address, map);
+
                     for (URL url : urls) {
+                        // 将 URL 协议头设置为 registry 这里registry = ${protocol}
+                        // 到了这里URL变成了：zookeeper://127.0.0.1:2181/com.alibaba.dubbo.registry.RegistryService?application=xxxx&registry=zookeeper
                         url = url.addParameter(Constants.REGISTRY_KEY, url.getProtocol());
+
+                        // 将协议设置为registry, protocol = registry
+                        // 到这里URL变成了：registry://127.0.0.1:2181/com.alibaba.dubbo.registry.RegistryService?application=xxxx&registry=zookeeper
                         url = url.setProtocol(Constants.REGISTRY_PROTOCOL);
                         if ((provider && url.getParameter(Constants.REGISTER_KEY, true))
                                 || (!provider && url.getParameter(Constants.SUBSCRIBE_KEY, true))) {

@@ -53,6 +53,8 @@ public class Transporters {
         } else {
             handler = new ChannelHandlerDispatcher(handlers);
         }
+
+        // Transporter$Adaptive 会在运行时根据传入的 URL 参数决定加载什么类型的 Transporter，默认为 NettyTransporter
         return getTransporter().bind(url, handler);
     }
 
@@ -72,6 +74,9 @@ public class Transporters {
         } else {
             handler = new ChannelHandlerDispatcher(handlers);
         }
+
+        // 获取 Transporter 自适应拓展类，并调用 connect 方法生成 Client 实例
+        // 默认是Netty
         return getTransporter().connect(url, handler);
     }
 

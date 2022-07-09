@@ -71,16 +71,41 @@ public abstract class Proxy {
 
     /**
      * Get proxy.
-     *
+     * 最终生成的代理类的代码
      * @param cl  class loader.
      * @param ics interface class array.
      * @return Proxy instance.
+     *
+     * package org.apache.dubbo.common.bytecode;
+     *
+     * public class proxy0 implements org.apache.dubbo.demo.DemoService {
+     *
+     *     public static java.lang.reflect.Method[] methods;
+     *
+     *     private java.lang.reflect.InvocationHandler handler;
+     *
+     *     public proxy0() {
+     *     }
+     *
+     *     public proxy0(java.lang.reflect.InvocationHandler arg0) {
+     *         handler = $1;
+     *     }
+     *
+     *     public java.lang.String sayHello(java.lang.String arg0) {
+     *         Object[] args = new Object[1];
+     *         args[0] = ($w) $1;
+     *         Object ret = handler.invoke(this, methods[0], args);
+     *         return (java.lang.String) ret;
+     *     }
+     * }
      */
     public static Proxy getProxy(ClassLoader cl, Class<?>... ics) {
         if (ics.length > 65535)
             throw new IllegalArgumentException("interface limit exceeded");
 
         StringBuilder sb = new StringBuilder();
+
+        // 遍历接口列表
         for (int i = 0; i < ics.length; i++) {
             String itf = ics[i].getName();
             if (!ics[i].isInterface())
@@ -88,6 +113,7 @@ public abstract class Proxy {
 
             Class<?> tmp = null;
             try {
+                // 重新加载接口类
                 tmp = Class.forName(itf, false, cl);
             } catch (ClassNotFoundException e) {
             }
@@ -121,6 +147,7 @@ public abstract class Proxy {
                         return proxy;
                 }
 
+                // 多线程控制，保证只有一个线程可以进行后续操作
                 if (value == PendingGenerationMarker) {
                     try {
                         cache.wait();
@@ -155,7 +182,9 @@ public abstract class Proxy {
                 }
                 ccp.addInterface(ics[i]);
 
+                // 遍历接口方法
                 for (Method method : ics[i].getMethods()) {
+                    // 获取方法描述，可理解为方法签名
                     String desc = ReflectUtils.getDesc(method);
                     if (worked.contains(desc))
                         continue;
@@ -168,6 +197,9 @@ public abstract class Proxy {
                     StringBuilder code = new StringBuilder("Object[] args = new Object[").append(pts.length).append("];");
                     for (int j = 0; j < pts.length; j++)
                         code.append(" args[").append(j).append("] = ($w)$").append(j + 1).append(";");
+
+                    // 生成 InvokerHandler 接口的 invoker 方法调用语句，如下：
+                    // Object ret = handler.invoke(this, methods[1...N], args);
                     code.append(" Object ret = handler.invoke(this, methods[" + ix + "], args);");
                     if (!Void.TYPE.equals(rt))
                         code.append(" return ").append(asArgument(rt, "ret")).append(";");
@@ -185,6 +217,11 @@ public abstract class Proxy {
             ccp.setClassName(pcn);
             ccp.addField("public static java.lang.reflect.Method[] methods;");
             ccp.addField("private " + InvocationHandler.class.getName() + " handler;");
+
+            // 为接口代理类添加带有 InvocationHandler 参数的构造方法，比如：
+            // porxy0(java.lang.reflect.InvocationHandler arg0) {
+            //     handler=$1;
+            // }
             ccp.addConstructor(Modifier.PUBLIC, new Class<?>[]{InvocationHandler.class}, new Class<?>[0], "handler=$1;");
             ccp.addDefaultConstructor();
             Class<?> clazz = ccp.toClass();

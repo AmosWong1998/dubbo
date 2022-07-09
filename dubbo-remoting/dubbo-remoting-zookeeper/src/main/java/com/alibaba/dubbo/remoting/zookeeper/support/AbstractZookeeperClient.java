@@ -77,6 +77,8 @@ public abstract class AbstractZookeeperClient<TargetChildListener> implements Zo
         if (i > 0) {
             create(path.substring(0, i), false);
         }
+
+        // 根据 ephemeral 的值创建临时或持久节点
         if (ephemeral) {
             createEphemeral(path);
         } else {
