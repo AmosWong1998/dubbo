@@ -1,0 +1,3 @@
+cat = com.alibaba.dubbo.demo.amos.Cat
+dog = com.alibaba.dubbo.demo.amos.Dog
+human = com.alibaba.dubbo.demo.amos.Human

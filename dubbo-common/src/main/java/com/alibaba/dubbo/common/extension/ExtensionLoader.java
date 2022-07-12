@@ -567,13 +567,16 @@ public class ExtensionLoader<T> {
             }
             // Dubbo IoC的实现：通过setter方法注入依赖的属性
             injectExtension(instance);
+
+            // Dubbo AOP的实现
             // 拓展点会使用Wrapper包装起来，通过 Wrapper 类可以把所有扩展点公共逻辑移至 Wrapper 中 类似于AOP
             // ExtensionLoader 中返回的实际上是 Wrapper 类的实例，Wrapper 持有了实际的扩展点实现类。
             Set<Class<?>> wrapperClasses = cachedWrapperClasses;
             if (wrapperClasses != null && !wrapperClasses.isEmpty()) {
                 for (Class<?> wrapperClass : wrapperClasses) {
-                    // 利用反射通过构造器去创建实例
-                    instance = injectExtension((T) wrapperClass.getConstructor(type).newInstance(instance));
+                    // 循环创建 Wrapper 实例,形成Wrapper包装链
+                    T t = (T) wrapperClass.getConstructor(type).newInstance(instance);
+                    instance = injectExtension(t);
                 }
             }
             return instance;
