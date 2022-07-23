@@ -1,4 +1,4 @@
-package com.alibaba.dubbo.demo.amos;
+package com.alibaba.dubbo.demo.amos.spi;
 
 /**
  * @author amos wong

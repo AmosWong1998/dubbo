@@ -1,0 +1,2 @@
+cf = com.alibaba.dubbo.demo.amos.adaptive.CFGame
+zelda = com.alibaba.dubbo.demo.amos.adaptive.ZeldaGame
