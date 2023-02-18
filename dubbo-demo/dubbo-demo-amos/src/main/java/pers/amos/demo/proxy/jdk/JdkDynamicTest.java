@@ -7,7 +7,7 @@ package pers.amos.demo.proxy.jdk;
 
 public class JdkDynamicTest {
     public static void main(String[] args) {
-        System.getProperties().put("sun.misc.ProxyGenerator.saveGeneratedFiles","true");
+        System.getProperties().put("sun.misc.ProxyGenerator.saveGeneratedFiles", "true");
         Human human = new Male();
         AmosInvocationHandler invocationHandler = new AmosInvocationHandler(human);
         Human proxy = (Human) invocationHandler.getProxy();
